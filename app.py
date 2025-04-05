@@ -112,6 +112,199 @@ def protected():
     return jsonify({'msg': f'Usuario com ID {current_user_id} acessou a rota protegida'}), 200
 
 
+@app.route('/recipes', methods=['POST'])
+@jwt_required()
+def create_recipe():
+    """
+    Cria uma nova receita
+    ---
+    Security:
+        - BearerAuth: []
+    parametros:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+                title:
+                    type: string
+                ingredients:
+                    type: string
+                time_minutes:
+                    type: integer
+    responses:
+        201:
+            description: Receita criada com sucesso
+        401:
+            description: Token não fornecido ou inválido
+    """
+    data = request.get_json()  # pega o corpo da requisição Json
+    new_recipe = Receipe(  # aqui está criando um novo objeto da classe receipe com os dados que vieram da requisição
+        title=data['title'],
+        ingredients=data['ingredients'],
+        time_minutes=data['time_minutes']
+    )
+
+    db.session.add(new_recipe)
+    db.session.commit()
+    return jsonify({'msg': 'Recipe created'}), 201
+
+
+@app.route('/recipes', methods=['GET'])
+def get_recipes():
+    """
+    Lista receitas com filtros opcionais.
+    ---
+    parameters:
+      - name: ingredient
+        in: query
+        type: string
+        required: false
+        description: Filtro por ingrediente
+      - name: max_time
+        in: query
+        type: integer
+        required: false
+        description: Tempo máximo de preparo (em minutos)
+    responses:
+      200:
+        description: Lista de receitas filtrada
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              title:
+                type: string
+              ingredients:
+                type: string
+              time_minutes:
+                type: integer
+    """
+    infredient = request.args.get('ingredient')
+    # pega os parâmetros da URL (chamados query parameters). http://127.0.0.1:5001/recipes?ingredient=Feijão
+    max_time = request.args.get('max_time', type=int)
+    # a mesma coisa do que em cima
+
+    # consulta sem filtros. Aqui você está preparando a busca das receitas.
+    query = Receipe.query
+
+    # Se o usuário mandou o filtro ingredient, fazemos um filtro usando LIKE (busca parcial, insensível a maiúsculas/minúsculas).
+    if infredient:
+        query = query.filter(Receipe.ingredients.ilike(f'%{infredient}%'))
+    if max_time is not None:
+        query = query.filter(Receipe.time_minutes <= max_time)
+
+    receipes = query.all()
+    # Aqui estamos:
+    # Percorrendo todas as receitas retornadas da consulta.
+    # Transformando em dicionários para cada receita.
+    # Retornando como JSON para o cliente.
+    return jsonify(
+        [
+            {
+                "id": r.id,
+                "title": r.title,
+                "ingredients": r.ingredients,
+                "time_minutes": r.time_minutes
+
+            }
+            for r in receipes
+        ]
+
+    )
+
+
+@app.route('/recipes/<int:recipe_id>', methods=['PUT'])
+@jwt_required()
+def update_recipe(recipe_id):
+    """
+    Atualiza uma recita existente.
+    ---
+    Security:
+      -BearerAuth: []
+    parameters:
+      - in: path
+        name: recipe_id
+        required: true
+        type: integer
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            title:
+              type: string
+            ingredients:
+              type: string
+            time_minutes:
+              type: integer
+    responses:
+      200:
+       descriprion: Receita atualizada
+      404:
+       descriprion: Receita não encontrada
+      401:
+       descriprion: Token não fornecido ou invalido
+    """
+    data = request.get_json()
+    # Busca a receita com o ID informado. Se não encontrar, retorna erro 404.
+    recipe = Receipe.query.get_or_404(recipe_id)
+
+    if 'title' in data:
+        recipe.title = data['title']
+    if 'ingredients' in data:
+        recipe.ingredients = data['ingredients']
+    if 'time_minutes' in data:
+        recipe.time_minutes = data['time_minutes']
+
+    db.session.commit()
+    return jsonify({'msg': 'Recipe updated'}), 200
+
+
+@app.route('/recipes/<int:receipe_id>', methods=['DELETE'])
+@jwt_required()
+def delete_recipe(receipe_id):
+    """
+    Deleta uma recita existente.
+    ---
+    Security:
+      -BearerAuth: []
+    parameters:
+      - in: path
+        name: recipe_id
+        required: true
+        type: integer
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            title:
+              type: string
+            ingredients:
+              type: string
+            time_minutes:
+              type: integer
+    responses:
+      200:
+       descriprion: Receita deletada
+      404:
+       descriprion: Receita não encontrada
+      401:
+       descriprion: Token não fornecido ou invalido
+    """
+    data = request.get_json()
+    # Busca a receita com o ID informado. Se não encontrar, retorna erro 404.
+    recipe = Receipe.query.get_or_404(receipe_id)
+    db.session.delete(recipe)
+    db.session.commit()
+    return jsonify({'msg': 'registro exluido com sucesso'}), 200
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
     # with app.app_context():
